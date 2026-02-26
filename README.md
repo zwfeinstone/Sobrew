@@ -1,4 +1,4 @@
-# SoBrew Wholesale Portal (Next.js + Supabase)
+# Sobrew Wholesale Portal (Next.js + Supabase)
 
 Production-ready multi-tenant wholesale ordering portal built with **Next.js App Router**, **TypeScript**, **Tailwind CSS**, and **Supabase**.
 
