@@ -3,7 +3,7 @@
 import { useMemo, useState } from "react";
 
 type Product = { id: string; name: string; sku: string | null };
-type Mapping = { product_id: string; price_cents: number };
+type Mapping = { product_id: string; is_available: boolean; price_cents: number };
 
 export function CenterCatalogPricingForm({
   centerId,
@@ -22,7 +22,7 @@ export function CenterCatalogPricingForm({
       products.map((p) => [
         p.id,
         {
-          is_available: Boolean(by.get(p.id)),
+          is_available: Boolean(by.get(p.id)?.is_available),
           price: ((by.get(p.id)?.price_cents ?? 0) / 100).toFixed(2)
         }
       ])

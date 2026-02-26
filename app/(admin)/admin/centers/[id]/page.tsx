@@ -16,8 +16,8 @@ export default async function AdminCenterDetailPage({ params }: { params: { id: 
       .eq("active", true)
       .order("sort_order", { ascending: true }),
     supabase
-      .from("product_prices")
-      .select("product_id,price_cents")
+      .from("customer_products")
+      .select("product_id,is_available,price_cents")
       .eq("center_id", params.id)
   ]);
 

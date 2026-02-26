@@ -1,4 +1,4 @@
--- Restore tenancy helpers to center_users model
+-- Tenancy helpers (center_users is source of truth)
 create or replace function public.current_center_id()
 returns uuid
 language sql
@@ -22,7 +22,20 @@ $$;
 grant execute on function public.current_center_id() to authenticated;
 grant execute on function public.current_role() to authenticated;
 
--- Atomic checkout RPC using authoritative pricing from product_prices
+-- Center-specific catalog availability + authoritative pricing
+create table if not exists public.customer_products (
+  center_id uuid not null references public.centers(id) on delete cascade,
+  product_id uuid not null references public.products(id) on delete cascade,
+  is_available boolean not null default false,
+  price_cents integer not null check (price_cents >= 0),
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now(),
+  primary key (center_id, product_id)
+);
+
+alter table public.customer_products enable row level security;
+
+-- Atomic checkout RPC using customer_products as price source.
 create or replace function public.create_order_from_cart(
   p_items jsonb,
   p_shipping jsonb default null
@@ -35,7 +48,6 @@ as $$
 declare
   v_center_id uuid;
   v_role text;
-  v_tier_id uuid;
   v_order_id uuid;
   v_total_cents integer := 0;
   v_contact_name text;
@@ -69,14 +81,6 @@ begin
     raise exception 'Only center users can create orders';
   end if;
 
-  select c.tier_id into v_tier_id
-  from public.centers c
-  where c.id = v_center_id;
-
-  if v_tier_id is null then
-    raise exception 'Center tier not configured';
-  end if;
-
   v_contact_name := nullif(trim(coalesce(p_shipping->>'contact_name', '')), '');
   v_phone := nullif(trim(coalesce(p_shipping->>'phone', '')), '');
   v_address_line1 := nullif(trim(coalesce(p_shipping->>'address_line1', '')), '');
@@ -101,26 +105,30 @@ begin
     select product_id, sum(quantity)::integer as quantity
     from parsed_items
     group by product_id
-  ),
-  priced as (
-    select
-      n.product_id,
-      n.quantity,
-      coalesce(cp.price_cents, tp.price_cents) as price_cents
-    from normalized n
-    join public.products p on p.id = n.product_id and p.active = true
-    left join public.product_prices cp
-      on cp.product_id = n.product_id
-     and cp.center_id = v_center_id
-    left join public.product_prices tp
-      on tp.product_id = n.product_id
-     and tp.tier_id = v_tier_id
-    where n.quantity > 0
   )
-  select count(*) into v_item_count from normalized;
+  select count(*) into v_item_count
+  from normalized
+  where quantity > 0;
 
   if v_item_count is null or v_item_count = 0 then
     raise exception 'Cart is empty';
+  end if;
+
+  if exists (
+    with parsed_items as (
+      select
+        (item->>'product_id')::uuid as product_id,
+        (item->>'quantity')::integer as quantity
+      from jsonb_array_elements(p_items) item
+    ),
+    normalized as (
+      select product_id, sum(quantity)::integer as quantity
+      from parsed_items
+      group by product_id
+    )
+    select 1 from normalized where quantity <= 0
+  ) then
+    raise exception 'Cart contains invalid quantities';
   end if;
 
   with parsed_items as (
@@ -138,20 +146,19 @@ begin
     select
       n.product_id,
       n.quantity,
-      coalesce(cp.price_cents, tp.price_cents) as price_cents
+      cp.price_cents
     from normalized n
-    join public.products p on p.id = n.product_id and p.active = true
-    left join public.product_prices cp
-      on cp.product_id = n.product_id
-     and cp.center_id = v_center_id
-    left join public.product_prices tp
-      on tp.product_id = n.product_id
-     and tp.tier_id = v_tier_id
+    join public.products p
+      on p.id = n.product_id
+     and p.active = true
+    join public.customer_products cp
+      on cp.center_id = v_center_id
+     and cp.product_id = n.product_id
+     and cp.is_available = true
     where n.quantity > 0
+      and cp.price_cents >= 0
   )
-  select count(*) into v_valid_count
-  from priced
-  where price_cents is not null;
+  select count(*) into v_valid_count from priced;
 
   if v_valid_count <> v_item_count then
     raise exception 'Cart contains unavailable or unpriced items';
@@ -202,16 +209,17 @@ begin
     select
       n.product_id,
       n.quantity,
-      coalesce(cp.price_cents, tp.price_cents) as price_cents
+      cp.price_cents
     from normalized n
-    join public.products p on p.id = n.product_id and p.active = true
-    left join public.product_prices cp
-      on cp.product_id = n.product_id
-     and cp.center_id = v_center_id
-    left join public.product_prices tp
-      on tp.product_id = n.product_id
-     and tp.tier_id = v_tier_id
+    join public.products p
+      on p.id = n.product_id
+     and p.active = true
+    join public.customer_products cp
+      on cp.center_id = v_center_id
+     and cp.product_id = n.product_id
+     and cp.is_available = true
     where n.quantity > 0
+      and cp.price_cents >= 0
   )
   insert into public.order_items (
     order_id,
@@ -255,7 +263,8 @@ $$;
 
 grant execute on function public.create_order_from_cart(jsonb, jsonb) to authenticated;
 
--- Harden RLS for order writes: center users can read their own order/items but cannot write items directly.
+-- Explicit policy cleanup and hardened recreation
+
 drop policy if exists "center insert own order_items" on public.order_items;
 drop policy if exists "center create own order_items" on public.order_items;
 drop policy if exists "customer create own order_items" on public.order_items;
@@ -271,6 +280,10 @@ drop policy if exists "customer read own orders" on public.orders;
 drop policy if exists "customer create own orders" on public.orders;
 drop policy if exists "admin all orders" on public.orders;
 drop policy if exists "admin manage orders" on public.orders;
+
+drop policy if exists "center read own customer_products" on public.customer_products;
+drop policy if exists "customer read own customer_products" on public.customer_products;
+drop policy if exists "admin manage customer_products" on public.customer_products;
 
 create policy "center read own orders" on public.orders
 for select
@@ -295,6 +308,15 @@ using (public.current_role() = 'admin')
 with check (public.current_role() = 'admin');
 
 create policy "admin all order_items" on public.order_items
+for all
+using (public.current_role() = 'admin')
+with check (public.current_role() = 'admin');
+
+create policy "center read own customer_products" on public.customer_products
+for select
+using (center_id = public.current_center_id() and public.current_role() = 'center_user');
+
+create policy "admin manage customer_products" on public.customer_products
 for all
 using (public.current_role() = 'admin')
 with check (public.current_role() = 'admin');
