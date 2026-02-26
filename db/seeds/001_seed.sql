@@ -1,10 +1,10 @@
--- Price tiers (legacy table retained for compatibility)
+-- Price tiers
 insert into public.price_tiers (id, name) values
   ('11111111-1111-1111-1111-111111111111', 'Standard Tier'),
   ('22222222-2222-2222-2222-222222222222', 'Premium Tier')
 on conflict do nothing;
 
--- Centers / customers
+-- Centers
 insert into public.centers (id, name, slug, tier_id, logo_url, accent_color, notes, contact_email, shipping_line1, shipping_line2, city, state, zip, is_active)
 values
   ('aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa', 'Sunrise Recovery Center', 'sunrise', '11111111-1111-1111-1111-111111111111', 'https://picsum.photos/seed/sunrise/160/80', '#1455A6', 'Priority shipping on Mondays', 'purchasing@sunrise.test', '123 Main St', null, 'Austin', 'TX', '78701', true),
@@ -30,7 +30,7 @@ on conflict (id) do update set
   sort_order=excluded.sort_order,
   unit=excluded.unit;
 
--- Legacy tier pricing retained
+-- Tier pricing in cents
 insert into public.product_prices (product_id, tier_id, price_cents)
 values
   ('10000000-0000-0000-0000-000000000001', '11111111-1111-1111-1111-111111111111', 1250),
@@ -47,23 +47,7 @@ values
   ('10000000-0000-0000-0000-000000000006', '22222222-2222-2222-2222-222222222222', 850)
 on conflict do nothing;
 
--- Customer-specific catalog/availability/pricing (source of truth for customer portal)
-insert into public.customer_products (customer_id, product_id, is_available, price_cents)
-select c.id, p.id, true,
-  case c.id
-    when 'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa' then (array[1250,1399,1199,999,1499,899])[row_number() over (partition by c.id order by p.sort_order)]
-    when 'bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb' then (array[1175,1299,1099,949,1599,850])[row_number() over (partition by c.id order by p.sort_order)]
-    else (array[1250,1399,1199,999,1699,899])[row_number() over (partition by c.id order by p.sort_order)]
-  end
-from public.centers c
-cross join public.products p
-where p.active = true
-on conflict (customer_id, product_id) do update
-set is_available = excluded.is_available,
-    price_cents = excluded.price_cents;
-
--- Example restricted catalog entries
-update public.customer_products
-set is_available = false
-where customer_id = 'cccccccc-cccc-cccc-cccc-cccccccccccc'
-  and product_id in ('10000000-0000-0000-0000-000000000005', '10000000-0000-0000-0000-000000000006');
+-- Center-specific override example
+insert into public.product_prices (product_id, center_id, price_cents)
+values ('10000000-0000-0000-0000-000000000005', 'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa', 1499)
+on conflict do nothing;

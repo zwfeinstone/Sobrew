@@ -3,15 +3,15 @@
 import { useMemo, useState } from "react";
 
 type Product = { id: string; name: string; sku: string | null };
-type Mapping = { product_id: string; is_available: boolean; price_cents: number };
+type Mapping = { product_id: string; price_cents: number };
 
 export function CenterCatalogPricingForm({
-  customerId,
+  centerId,
   products,
   mappings,
   action
 }: {
-  customerId: string;
+  centerId: string;
   products: Product[];
   mappings: Mapping[];
   action: (formData: FormData) => void;
@@ -22,7 +22,7 @@ export function CenterCatalogPricingForm({
       products.map((p) => [
         p.id,
         {
-          is_available: Boolean(by.get(p.id)?.is_available),
+          is_available: Boolean(by.get(p.id)),
           price: ((by.get(p.id)?.price_cents ?? 0) / 100).toFixed(2)
         }
       ])
@@ -34,7 +34,7 @@ export function CenterCatalogPricingForm({
   return (
     <form
       action={(formData) => {
-        formData.set("customer_id", customerId);
+        formData.set("center_id", centerId);
         Object.entries(rows).forEach(([productId, row]) => {
           formData.set(`product_${productId}`, JSON.stringify(row));
         });

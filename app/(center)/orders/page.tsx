@@ -1,12 +1,12 @@
 import Link from "next/link";
 import { LayoutShell } from "@/components/layout-shell";
 import { ensureActiveCustomerAccess } from "@/lib/actions";
-import { getCustomerOrders } from "@/lib/data";
+import { getCenterOrders } from "@/lib/data";
 import { formatUsd } from "@/lib/money";
 
 export default async function OrdersPage() {
   const profile = await ensureActiveCustomerAccess();
-  const orders = await getCustomerOrders(profile.customer_id!);
+  const orders = await getCenterOrders(profile.center_id);
 
   return (
     <LayoutShell title="Order History">

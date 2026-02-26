@@ -1,8 +1,8 @@
 import { getSupabaseServerClient } from "@/lib/supabase/server";
 
-export async function getBranding(customerId?: string) {
+export async function getBranding(centerId?: string) {
   const supabase = getSupabaseServerClient();
-  if (!customerId) {
+  if (!centerId) {
     return {
       name: process.env.BRAND_NAME ?? "SoBrew Wholesale",
       logo_url: process.env.BRAND_LOGO_URL ?? "",
@@ -13,7 +13,7 @@ export async function getBranding(customerId?: string) {
   const { data } = await supabase
     .from("centers")
     .select("name,logo_url,accent_color")
-    .eq("id", customerId)
+    .eq("id", centerId)
     .single();
 
   return {
@@ -23,26 +23,19 @@ export async function getBranding(customerId?: string) {
   };
 }
 
-export async function getCustomerCatalog(customerId: string) {
+export async function getCenterCatalog(centerId: string) {
   const supabase = getSupabaseServerClient();
-  const { data, error } = await supabase
-    .from("customer_products")
-    .select("price_cents,products!inner(id,name,description,sku,image_url,active,sort_order,unit)")
-    .eq("customer_id", customerId)
-    .eq("is_available", true)
-    .eq("products.active", true)
-    .order("sort_order", { referencedTable: "products", ascending: true });
-
+  const { data, error } = await supabase.rpc("catalog_for_center", { p_center_id: centerId });
   if (error) throw error;
-  return (data ?? []).map((row: any) => ({ ...row.products, price_cents: row.price_cents }));
+  return data ?? [];
 }
 
-export async function getCustomerOrders(customerId: string) {
+export async function getCenterOrders(centerId: string) {
   const supabase = getSupabaseServerClient();
   const { data, error } = await supabase
     .from("orders")
     .select("id,status,total_cents,created_at")
-    .eq("center_id", customerId)
+    .eq("center_id", centerId)
     .order("created_at", { ascending: false });
   if (error) throw error;
   return data ?? [];

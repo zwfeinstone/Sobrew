@@ -2,11 +2,11 @@ import Image from "next/image";
 import { notFound } from "next/navigation";
 import { LayoutShell } from "@/components/layout-shell";
 import { ensureActiveCustomerAccess } from "@/lib/actions";
-import { getCustomerCatalog } from "@/lib/data";
+import { getCenterCatalog } from "@/lib/data";
 
 export default async function ProductDetailPage({ params }: { params: { id: string } }) {
   const profile = await ensureActiveCustomerAccess();
-  const products = await getCustomerCatalog(profile.customer_id!);
+  const products = await getCenterCatalog(profile.center_id);
   const product = products.find((item: any) => item.id === params.id);
   if (!product) notFound();
 

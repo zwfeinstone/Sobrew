@@ -12,7 +12,7 @@ export default async function OrderDetailPage({ params }: { params: { id: string
     .from("orders")
     .select("*, order_items(product_id, quantity, unit_price_cents, line_total_cents, products(name, image_url))")
     .eq("id", params.id)
-    .eq("center_id", profile.customer_id)
+    .eq("center_id", profile.center_id)
     .single();
 
   if (!order) return <LayoutShell title="Order not found">Not found</LayoutShell>;

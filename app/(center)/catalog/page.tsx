@@ -1,11 +1,11 @@
 import { LayoutShell } from "@/components/layout-shell";
 import { ProductCard } from "@/components/product-card";
 import { ensureActiveCustomerAccess } from "@/lib/actions";
-import { getCustomerCatalog } from "@/lib/data";
+import { getCenterCatalog } from "@/lib/data";
 
 export default async function CatalogPage() {
   const profile = await ensureActiveCustomerAccess();
-  const products = await getCustomerCatalog(profile.customer_id!);
+  const products = await getCenterCatalog(profile.center_id);
 
   return (
     <LayoutShell title="Catalog">

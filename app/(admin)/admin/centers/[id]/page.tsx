@@ -16,9 +16,9 @@ export default async function AdminCenterDetailPage({ params }: { params: { id: 
       .eq("active", true)
       .order("sort_order", { ascending: true }),
     supabase
-      .from("customer_products")
-      .select("product_id,is_available,price_cents")
-      .eq("customer_id", params.id)
+      .from("product_prices")
+      .select("product_id,price_cents")
+      .eq("center_id", params.id)
   ]);
 
   if (!center) return <LayoutShell title="Center not found" admin>Not found</LayoutShell>;
@@ -42,7 +42,7 @@ export default async function AdminCenterDetailPage({ params }: { params: { id: 
       </form>
 
       <CenterCatalogPricingForm
-        customerId={center.id}
+        centerId={center.id}
         products={(products ?? []) as any[]}
         mappings={(mappings ?? []) as any[]}
         action={upsertCenterCatalogAction}

@@ -1,4 +1,4 @@
-export type Role = "admin" | "customer";
+export type Role = "admin" | "center_user";
 export type OrderStatus = "New" | "Processing" | "Shipped";
 
 export interface Center {
@@ -18,7 +18,14 @@ export interface Center {
   created_at: string;
 }
 
-export interface ProductWithPrice {
+export interface CenterUser {
+  user_id: string;
+  center_id: string;
+  role: Role;
+  created_at?: string;
+}
+
+export interface Product {
   id: string;
   name: string;
   description: string | null;
@@ -27,6 +34,17 @@ export interface ProductWithPrice {
   sort_order?: number;
   image_url: string | null;
   active: boolean;
+}
+
+export interface ProductWithPrice extends Product {
+  price_cents: number;
+}
+
+export interface ProductPrice {
+  id?: string;
+  product_id: string;
+  tier_id?: string | null;
+  center_id?: string | null;
   price_cents: number;
 }
 

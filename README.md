@@ -20,7 +20,6 @@ Multi-tenant wholesale ordering portal built with Next.js App Router, TypeScript
    ```
 3. Run SQL in Supabase SQL editor (in order):
    - `db/migrations/001_init.sql`
-   - `db/migrations/002_admin_center_user_catalog.sql`
    - `db/migrations/003_products_admin_fields.sql`
    - `db/migrations/004_products_optional_sku.sql`
    - `db/migrations/005_create_order_from_cart.sql`
@@ -55,7 +54,7 @@ Multi-tenant wholesale ordering portal built with Next.js App Router, TypeScript
 - Admin: `/admin`, `/admin/centers`, `/admin/centers/[id]`, `/admin/users`, `/admin/products`, `/admin/orders`
 
 ## Notes
-- If a center is set inactive, customer access is blocked on customer routes.
+- If a center is set inactive, center-user access is blocked on center routes.
 - Shipping is included in catalog price display.
 - Emails sent on new order + confirmation; shipped email on status change to `Shipped`.
 

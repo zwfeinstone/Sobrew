@@ -13,7 +13,7 @@ function hexToRgbValue(hex: string | null) {
 
 export default async function CenterLayout({ children }: { children: React.ReactNode }) {
   const profile = await requireCustomer();
-  const branding = await getBranding(profile.customer_id ?? undefined);
+  const branding = await getBranding(profile.center_id ?? undefined);
 
   return (
     <div style={{ ["--brand-color-rgb" as string]: hexToRgbValue(branding.accent_color) }}>{children}</div>

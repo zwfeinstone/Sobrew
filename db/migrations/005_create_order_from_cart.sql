@@ -49,6 +49,7 @@ declare
   v_notes text;
   v_item_count integer;
   v_valid_count integer;
+  v_inserted_count integer;
 begin
   if p_items is null or jsonb_typeof(p_items) <> 'array' then
     raise exception 'Invalid cart payload';
@@ -227,6 +228,14 @@ begin
     quantity * price_cents
   from priced;
 
+  select count(*) into v_inserted_count
+  from public.order_items
+  where order_id = v_order_id;
+
+  if v_inserted_count <> v_item_count then
+    raise exception 'Order line insertion mismatch';
+  end if;
+
   select coalesce(sum(line_total_cents), 0)
     into v_total_cents
   from public.order_items
@@ -247,29 +256,21 @@ $$;
 grant execute on function public.create_order_from_cart(jsonb, jsonb) to authenticated;
 
 -- Harden RLS for order writes: center users can read their own order/items but cannot write items directly.
-do $$
-declare p record;
-begin
-  for p in
-    select tablename, policyname
-    from pg_policies
-    where schemaname='public'
-      and tablename in ('orders', 'order_items')
-      and policyname ilike 'customer%'
-  loop
-    execute format('drop policy if exists %I on public.%I', p.policyname, p.tablename);
-  end loop;
+drop policy if exists "center insert own order_items" on public.order_items;
+drop policy if exists "center create own order_items" on public.order_items;
+drop policy if exists "customer create own order_items" on public.order_items;
+drop policy if exists "customer insert own order_items" on public.order_items;
+drop policy if exists "center read own order_items" on public.order_items;
+drop policy if exists "customer read own order_items" on public.order_items;
+drop policy if exists "admin all order_items" on public.order_items;
+drop policy if exists "admin manage order_items" on public.order_items;
 
-  for p in
-    select tablename, policyname
-    from pg_policies
-    where schemaname='public'
-      and tablename in ('orders', 'order_items')
-      and policyname ilike 'center%'
-  loop
-    execute format('drop policy if exists %I on public.%I', p.policyname, p.tablename);
-  end loop;
-end $$;
+drop policy if exists "center read own orders" on public.orders;
+drop policy if exists "center create own orders" on public.orders;
+drop policy if exists "customer read own orders" on public.orders;
+drop policy if exists "customer create own orders" on public.orders;
+drop policy if exists "admin all orders" on public.orders;
+drop policy if exists "admin manage orders" on public.orders;
 
 create policy "center read own orders" on public.orders
 for select
@@ -280,6 +281,7 @@ for insert
 with check (
   center_id = public.current_center_id()
   and status = 'New'
+  and total_cents = 0
   and public.current_role() = 'center_user'
 );
 
@@ -287,7 +289,6 @@ create policy "center read own order_items" on public.order_items
 for select
 using (order_id in (select id from public.orders where center_id = public.current_center_id()));
 
--- Explicitly keep admin full access for orders/order_items
 create policy "admin all orders" on public.orders
 for all
 using (public.current_role() = 'admin')

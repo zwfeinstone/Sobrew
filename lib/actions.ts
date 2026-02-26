@@ -44,8 +44,8 @@ const productSchema = z.object({
 
 const inviteSchema = z.object({
   email: z.string().email(),
-  customer_id: z.string().uuid(),
-  role: z.enum(["admin", "customer"])
+  center_id: z.string().uuid(),
+  role: z.enum(["admin", "center_user"])
 });
 
 const dollarsToCents = (value: string) => Math.round(Number(value || 0) * 100);
@@ -110,29 +110,44 @@ export async function updateCenterAction(formData: FormData) {
 export async function upsertCenterCatalogAction(formData: FormData) {
   await requireAdmin();
   const supabase = getSupabaseServerClient();
-  const customerId = String(formData.get("customer_id"));
+  const centerId = String(formData.get("center_id"));
 
-  const entries: Array<{ customer_id: string; product_id: string; is_available: boolean; price_cents: number }> = [];
+  const entries: Array<{ center_id: string; product_id: string; price_cents: number }> = [];
+  const unavailableProductIds: string[] = [];
+
   for (const [key, val] of formData.entries()) {
     if (!key.startsWith("product_")) continue;
     const productId = key.replace("product_", "");
     const raw = JSON.parse(String(val)) as { is_available: boolean; price: string };
+    if (!raw.is_available) {
+      unavailableProductIds.push(productId);
+      continue;
+    }
+
     entries.push({
-      customer_id: customerId,
+      center_id: centerId,
       product_id: productId,
-      is_available: raw.is_available,
       price_cents: dollarsToCents(raw.price)
     });
   }
 
   if (entries.length) {
     const { error } = await supabase
-      .from("customer_products")
-      .upsert(entries, { onConflict: "customer_id,product_id" });
+      .from("product_prices")
+      .upsert(entries, { onConflict: "product_id,center_id" });
     if (error) throw error;
   }
 
-  revalidatePath(`/admin/centers/${customerId}`);
+  if (unavailableProductIds.length) {
+    const { error } = await supabase
+      .from("product_prices")
+      .delete()
+      .eq("center_id", centerId)
+      .in("product_id", unavailableProductIds);
+    if (error) throw error;
+  }
+
+  revalidatePath(`/admin/centers/${centerId}`);
   revalidatePath("/catalog");
 }
 
@@ -149,11 +164,10 @@ export async function inviteUserAction(formData: FormData) {
   const userId = invitation.user?.id;
   if (!userId) throw new Error("Invite created without user id");
 
-  const { error } = await supabase.from("profiles").upsert({
+  const { error } = await supabase.from("center_users").upsert({
     user_id: userId,
-    email: parsed.email,
-    role: parsed.role,
-    customer_id: parsed.role === "customer" ? parsed.customer_id : null
+    center_id: parsed.center_id,
+    role: parsed.role
   });
 
   if (error) throw error;
@@ -164,11 +178,11 @@ export async function reassignUserAction(formData: FormData) {
   await requireAdmin();
   const supabase = getSupabaseServerClient();
   const userId = String(formData.get("user_id"));
-  const customerId = String(formData.get("customer_id"));
+  const centerId = String(formData.get("center_id"));
 
   const { error } = await supabase
-    .from("profiles")
-    .update({ customer_id: customerId || null })
+    .from("center_users")
+    .update({ center_id: centerId })
     .eq("user_id", userId);
   if (error) throw error;
 
@@ -216,16 +230,10 @@ export async function updateProductAction(formData: FormData) {
 }
 
 export async function createOrderAction(formData: FormData) {
-  const { user } = await requireUser();
+  const { user, centerUser } = await requireUser();
   const supabase = getSupabaseServerClient();
 
-  const { data: centerUser } = await supabase
-    .from("center_users")
-    .select("center_id,role")
-    .eq("user_id", user.id)
-    .single();
-
-  if (!centerUser || centerUser.role !== "center_user") throw new Error("Unauthorized");
+  if (centerUser.role !== "center_user") throw new Error("Unauthorized");
 
   const parsed = checkoutSchema.parse(Object.fromEntries(formData.entries()));
   const rawCart = JSON.parse(parsed.cart_json) as Array<Record<string, unknown>>;
@@ -306,19 +314,21 @@ export async function updateOrderStatusAction(formData: FormData) {
     .single();
 
   if (status === "Shipped" && order) {
-    const { data: customerUser } = await supabase
-      .from("profiles")
-      .select("email")
-      .eq("customer_id", order.center_id)
-      .eq("role", "customer")
+    const { data: centerUser } = await supabase
+      .from("center_users")
+      .select("user_id")
+      .eq("center_id", order.center_id)
+      .eq("role", "center_user")
       .limit(1)
       .single();
 
-    if (customerUser?.email) {
+    const { data: authUser } = await supabaseAdmin.auth.admin.getUserById(centerUser?.user_id ?? "");
+
+    if (authUser.user?.email) {
       await sendShippedEmail({
         orderId: order.id,
         centerName: (order.centers as any)?.name ?? "Center",
-        centerEmail: customerUser.email,
+        centerEmail: authUser.user.email,
         createdAt: order.created_at,
         shipping: {
           contact_name: order.contact_name,
@@ -351,7 +361,7 @@ export async function ensureActiveCustomerAccess() {
   const { data: center } = await supabase
     .from("centers")
     .select("is_active")
-    .eq("id", profile.customer_id)
+     .eq("id", profile.center_id)
     .single();
 
   if (!center?.is_active) {
