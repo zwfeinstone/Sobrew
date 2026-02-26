@@ -112,24 +112,39 @@ export async function upsertCenterCatalogAction(formData: FormData) {
   const supabase = getSupabaseServerClient();
   const centerId = String(formData.get("center_id"));
 
-  const entries: Array<{ center_id: string; product_id: string; is_available: boolean; price_cents: number }> = [];
+  const entries: Array<{ center_id: string; product_id: string; price_cents: number }> = [];
+  const noOverrideProductIds: string[] = [];
 
   for (const [key, val] of formData.entries()) {
     if (!key.startsWith("product_")) continue;
     const productId = key.replace("product_", "");
     const raw = JSON.parse(String(val)) as { is_available: boolean; price: string };
+
+    if (!raw.is_available) {
+      noOverrideProductIds.push(productId);
+      continue;
+    }
+
     entries.push({
       center_id: centerId,
       product_id: productId,
-      is_available: raw.is_available,
       price_cents: dollarsToCents(raw.price)
     });
   }
 
   if (entries.length) {
     const { error } = await supabase
-      .from("customer_products")
-      .upsert(entries, { onConflict: "center_id,product_id" });
+      .from("product_prices")
+      .upsert(entries, { onConflict: "product_id,center_id" });
+    if (error) throw error;
+  }
+
+  if (noOverrideProductIds.length) {
+    const { error } = await supabase
+      .from("product_prices")
+      .delete()
+      .eq("center_id", centerId)
+      .in("product_id", noOverrideProductIds);
     if (error) throw error;
   }
 

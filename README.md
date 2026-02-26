@@ -44,7 +44,7 @@ Multi-tenant wholesale ordering portal built with Next.js App Router, TypeScript
 1. Log in as admin and open `/admin/centers`.
 2. Create a center with contact + shipping details.
 3. Open that center at `/admin/centers/[id]`.
-4. In **Catalog & Pricing**, mark each product Available/Unavailable and set center-specific price in dollars (saved in `customer_products`).
+4. In **Catalog & Pricing**, mark each product Available/Unavailable and set center-specific override price in dollars (stored in `product_prices` center override rows).
 5. Open `/admin/users` and invite the center user by email (Supabase Admin API).
 6. Assign the invited user to the center (role `center_user`).
 7. Center user logs in and sees only that center's catalog/prices/orders.
@@ -61,5 +61,5 @@ Multi-tenant wholesale ordering portal built with Next.js App Router, TypeScript
 
 
 ## Checkout integrity
-- Orders are repriced server-side from `customer_products` inside Postgres RPC `create_order_from_cart`; client cart pricing is ignored.
+- Orders are repriced server-side from `product_prices` (center override then tier fallback) inside Postgres RPC `create_order_from_cart`; client cart pricing is ignored.
 - Orders + line items are created transactionally to prevent orphan orders and client-side cart tampering.

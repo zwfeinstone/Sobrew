@@ -3,7 +3,7 @@
 import { useMemo, useState } from "react";
 
 type Product = { id: string; name: string; sku: string | null };
-type Mapping = { product_id: string; is_available: boolean; price_cents: number };
+type Mapping = { product_id: string; price_cents: number };
 
 export function CenterCatalogPricingForm({
   centerId,
@@ -22,7 +22,7 @@ export function CenterCatalogPricingForm({
       products.map((p) => [
         p.id,
         {
-          is_available: Boolean(by.get(p.id)?.is_available),
+          is_available: Boolean(by.get(p.id)),
           price: ((by.get(p.id)?.price_cents ?? 0) / 100).toFixed(2)
         }
       ])
@@ -43,13 +43,13 @@ export function CenterCatalogPricingForm({
       className="card space-y-3"
     >
       <h2 className="text-lg font-semibold">Catalog & Pricing</h2>
-      <p className="text-sm text-slate-600">Enter center-specific prices in dollars. Stored as integer cents.</p>
+      <p className="text-sm text-slate-600">Set center override prices in dollars (unchecked = use tier/default pricing). Stored as integer cents.</p>
       <div className="overflow-x-auto">
         <table className="min-w-full text-sm">
           <thead>
             <tr className="border-b text-left">
               <th className="py-2">Product</th>
-              <th className="py-2">Available</th>
+              <th className="py-2">Center Override</th>
               <th className="py-2">Price ($)</th>
             </tr>
           </thead>

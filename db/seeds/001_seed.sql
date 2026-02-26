@@ -47,23 +47,8 @@ values
   ('10000000-0000-0000-0000-000000000006', '22222222-2222-2222-2222-222222222222', 850)
 on conflict do nothing;
 
--- Center-specific catalog/availability/pricing (authoritative for checkout)
-insert into public.customer_products (center_id, product_id, is_available, price_cents)
-select c.id, p.id, true,
-  case c.id
-    when 'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa' then (array[1250,1399,1199,999,1499,899])[row_number() over (partition by c.id order by p.sort_order)]
-    when 'bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb' then (array[1175,1299,1099,949,1599,850])[row_number() over (partition by c.id order by p.sort_order)]
-    else (array[1250,1399,1199,999,1699,899])[row_number() over (partition by c.id order by p.sort_order)]
-  end
-from public.centers c
-cross join public.products p
-where p.active = true
-on conflict (center_id, product_id) do update
-set is_available = excluded.is_available,
-    price_cents = excluded.price_cents;
 
--- Example restricted catalog entries
-update public.customer_products
-set is_available = false
-where center_id = 'cccccccc-cccc-cccc-cccc-cccccccccccc'
-  and product_id in ('10000000-0000-0000-0000-000000000005', '10000000-0000-0000-0000-000000000006');
+-- Center-specific override example
+insert into public.product_prices (product_id, center_id, price_cents)
+values ('10000000-0000-0000-0000-000000000005', 'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa', 1499)
+on conflict do nothing;
